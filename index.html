@@ -128,6 +128,16 @@ main{max-width:560px;margin:auto;padding:16px 16px 110px}
 .periodo{display:flex;gap:10px}
 .periodo label{flex:1;font-size:13px;color:var(--texto2)}
 .periodo input{margin-top:4px}
+.painel select{width:100%;font-size:17px;padding:13px;border:1px solid var(--borda-campo);border-radius:12px;margin-bottom:10px;background:var(--campo);color:var(--texto);font-family:inherit;appearance:none}
+.linkBt{width:100%;background:none;border:1px dashed var(--borda-campo);color:var(--texto2);border-radius:12px;padding:12px;font-size:15px;font-weight:600;margin-bottom:10px;cursor:pointer;font-family:inherit}
+.opcional{font-weight:400;color:var(--texto3)}
+.listaCli{max-height:46vh;overflow-y:auto;margin-bottom:12px}
+.cli{display:flex;align-items:center;gap:10px;padding:12px 2px;border-bottom:1px solid var(--linha)}
+.cliTxt{flex:1;min-width:0}
+.cliTxt b{display:block;font-size:16px;font-weight:600}
+.cliTxt span{font-size:13px;color:var(--texto2)}
+.cliBt{background:none;border:none;color:var(--texto2);font-size:15px;padding:8px;cursor:pointer;border-radius:8px;font-family:inherit}
+.cliBt:active{background:var(--trilho)}
 
 .login{position:fixed;inset:0;background:var(--topo);color:var(--topo-texto);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;z-index:30;text-align:center;padding:24px}
 :root[data-tema="claro"] .login{background:var(--verde);color:#fff}
@@ -217,7 +227,8 @@ main{max-width:560px;margin:auto;padding:16px 16px 110px}
 
 <div class="modal" id="mNova"><div class="painel">
   <h2>Nova cobrança</h2>
-  <input id="cliente" placeholder="Nome do cliente">
+  <select id="cliente" aria-label="Cliente"></select>
+  <button class="linkBt" onclick="novoCliente()">+ Cadastrar novo cliente</button>
   <input id="servico" placeholder="O que foi feito? (ex.: corte de cabelo)">
   <div class="campo-valor"><span class="moeda">R$</span><input id="valor" type="text" inputmode="numeric" autocomplete="off" placeholder="0,00"></div>
   <input id="venc" type="date">
@@ -237,6 +248,22 @@ main{max-width:560px;margin:auto;padding:16px 16px 110px}
   <button class="fechar" onclick="fechar()">Cancelar</button>
 </div></div>
 
+<div class="modal" id="mClientes"><div class="painel">
+  <h2>Meus clientes</h2>
+  <div class="listaCli" id="listaCli"></div>
+  <button class="principal" onclick="novoCliente()">+ Novo cliente</button>
+  <button class="fechar" onclick="fechar()">Fechar</button>
+</div></div>
+
+<div class="modal" id="mCliente"><div class="painel">
+  <h2 id="tituloCliente">Novo cliente</h2>
+  <input id="cliNome" placeholder="Nome do cliente">
+  <input id="cliFone" inputmode="tel" placeholder="WhatsApp com DDD">
+  <p class="dica">O telefone é <span class="opcional">opcional</span>. Com ele, a cobrança abre direto na conversa do cliente.</p>
+  <button class="principal" onclick="salvarCliente()">Salvar cliente</button>
+  <button class="fechar" onclick="voltarCliente()">Cancelar</button>
+</div></div>
+
 <div class="modal" id="mDados"><div class="painel">
   <h2>Minha conta</h2>
   <div class="conta" id="conta"></div>
@@ -246,6 +273,8 @@ main{max-width:560px;margin:auto;padding:16px 16px 110px}
     <button id="tEscuro" onclick="setTema('escuro')">Escuro</button>
     <button id="tAuto" onclick="setTema('auto')">Automático</button>
   </div>
+  <p class="secao">Clientes</p>
+  <button class="linkBt" onclick="abrir('mClientes')">Gerenciar meus clientes</button>
   <p class="secao">Onde você recebe</p>
   <p class="aviso" id="avisoPix" hidden></p>
   <input id="chave" placeholder="Chave Pix (telefone: +5511999999999)">
@@ -262,7 +291,7 @@ const SUPABASE_URL = 'https://xfkiaicwzyfeatsxbskz.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_LRIB_DIwGRHMqukblUxx_w_1SdKkoEA';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let dados = {}, cobs = [], user = null;
+let dados = {}, cobs = [], clientes = [], user = null, editandoCliente = null, voltarDoCliente = null;
 let filtro = 'aberto', busca = '', de = '', ate = '';
 const $ = id => document.getElementById(id);
 const brl = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -339,6 +368,8 @@ sb.auth.onAuthStateChange((ev, session) => { if (session && !user) iniciar(); })
 async function carregar() {
   const { data: p } = await sb.from('perfis').select('*').maybeSingle();
   dados = p ? { chave: p.chave, meuNome: p.nome, cidade: p.cidade } : {};
+  const { data: cl } = await sb.from('clientes').select('*').order('nome');
+  clientes = cl || [];
   const { data: c, error } = await sb.from('cobrancas').select('*').order('criado_em');
   if (erro(error)) return;
   cobs = (c || []).map(x => ({ ...x, valor: Number(x.valor) }));
@@ -360,7 +391,10 @@ function mostrarConta() {
 }
 
 function abrir(id) {
+  fechar();
   if (id === 'mDados') ['chave','meuNome','cidade'].forEach(k => $(k).value = dados[k] || '');
+  if (id === 'mClientes') renderClientes();
+  if (id === 'mNova') encherSeletor();
   if (id === 'mPeriodo') {
     $('de').value = de; $('ate').value = ate;
     $('dicaPeriodo').textContent = filtro === 'pago'
@@ -418,12 +452,98 @@ function filtradas() {
     : (a.venc || '9').localeCompare(b.venc || '9'));
 }
 
+// ---------- Clientes
+const soDigitos = t => String(t || '').replace(/\D/g, '');
+function foneBonito(f) {
+  const d = soDigitos(f).replace(/^55/, '');
+  if (d.length === 11) return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+  return f || '';
+}
+function clientePorId(id) { return clientes.find(c => c.id === id); }
+
+function renderClientes() {
+  $('listaCli').innerHTML = clientes.length ? clientes.map(c => `<div class="cli">
+    <div class="cliTxt"><b>${esc(c.nome)}</b><span>${c.fone ? esc(foneBonito(c.fone)) : 'sem telefone'}</span></div>
+    <button class="cliBt" onclick="editarCliente(${c.id})">Editar</button>
+    <button class="cliBt" onclick="excluirCliente(${c.id})">🗑</button>
+  </div>`).join('') : '<div class="vazio">Nenhum cliente ainda.<br>Cadastre uma vez e depois é só escolher na hora de cobrar.</div>';
+}
+function deOndeVim() {
+  return ['mNova','mClientes'].find(id => $(id).classList.contains('aberto')) || null;
+}
+function voltarCliente() {
+  const v = voltarDoCliente; voltarDoCliente = null;
+  v ? abrir(v) : fechar();
+}
+function novoCliente() {
+  voltarDoCliente = deOndeVim();
+  editandoCliente = null;
+  $('tituloCliente').textContent = 'Novo cliente';
+  $('cliNome').value = ''; $('cliFone').value = '';
+  abrir('mCliente');
+  $('cliNome').focus();
+}
+function editarCliente(id) {
+  const c = clientePorId(id);
+  if (!c) return;
+  voltarDoCliente = deOndeVim();
+  editandoCliente = id;
+  $('tituloCliente').textContent = 'Editar cliente';
+  $('cliNome').value = c.nome || ''; $('cliFone').value = c.fone ? foneBonito(c.fone) : '';
+  abrir('mCliente');
+}
+async function salvarCliente() {
+  const nome = $('cliNome').value.trim();
+  if (!nome) return alert('Informe o nome do cliente.');
+  const fone = soDigitos($('cliFone').value) || null;
+  if (editandoCliente) {
+    const { error } = await sb.from('clientes').update({ nome, fone }).eq('id', editandoCliente);
+    if (erro(error)) return;
+    const c = clientePorId(editandoCliente);
+    c.nome = nome; c.fone = fone;
+  } else {
+    const { data, error } = await sb.from('clientes').insert({ nome, fone }).select().single();
+    if (erro(error)) return;
+    clientes.push(data);
+    window.__novoId = data.id;
+  }
+  const salvo = editandoCliente || window.__novoId;
+  clientes.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  editandoCliente = null;
+  const volta = voltarDoCliente; voltarDoCliente = null;
+  if (volta === 'mNova') { abrir('mNova'); $('cliente').value = salvo; }
+  else if (volta === 'mClientes') abrir('mClientes');
+  else fechar();
+  render();
+}
+async function excluirCliente(id) {
+  const c = clientePorId(id);
+  const quantas = cobs.filter(x => x.cliente_id === id).length;
+  const aviso = quantas
+    ? `Excluir ${c.nome}? As ${quantas} cobrança(s) dele continuam na lista, com o nome guardado.`
+    : `Excluir ${c.nome}?`;
+  if (!confirm(aviso)) return;
+  const { error } = await sb.from('clientes').delete().eq('id', id);
+  if (erro(error)) return;
+  clientes = clientes.filter(x => x.id !== id);
+  cobs.forEach(x => { if (x.cliente_id === id) x.cliente_id = null; });
+  renderClientes(); render();
+}
+function encherSeletor() {
+  const atual = $('cliente').value;
+  $('cliente').innerHTML = '<option value="">Escolha o cliente</option>'
+    + clientes.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('');
+  if (atual) $('cliente').value = atual;
+}
+
 // ---------- Cobranças
 function novaCobranca() {
   if (!dados.chave) {
     pedirPix('Cadastre sua chave Pix antes de criar uma cobrança. É para ela que o dinheiro vai cair.');
     return;
   }
+  if (!clientes.length) return novoCliente();
   abrir('mNova');
 }
 function pedirPix(texto) {
@@ -461,9 +581,13 @@ async function adicionar() {
     return pedirPix('Cadastre sua chave Pix antes de criar uma cobrança.');
   }
   const valor = valorDigitado();
-  if (!$('cliente').value.trim() || !valor) return alert('Preencha o cliente e o valor.');
+  const cliId = Number($('cliente').value);
+  const cli = clientePorId(cliId);
+  if (!cli) return alert('Escolha um cliente da lista, ou cadastre um novo.');
+  if (!valor) return alert('Informe o valor da cobrança.');
   const nova = {
-    cliente: $('cliente').value.trim(),
+    cliente_id: cli.id,
+    cliente: cli.nome,
     servico: $('servico').value.trim(),
     valor,
     venc: $('venc').value || null
@@ -471,7 +595,8 @@ async function adicionar() {
   const { data, error } = await sb.from('cobrancas').insert(nova).select().single();
   if (erro(error)) return;
   cobs.push({ ...data, valor: Number(data.valor) });
-  ['cliente','servico','valor','venc'].forEach(k => $(k).value = '');
+  ['servico','valor','venc'].forEach(k => $(k).value = '');
+  $('cliente').value = '';
   fechar(); setFiltro('aberto');
 }
 async function alternar(id) {
@@ -505,7 +630,11 @@ function enviar(id) {
   const msg = `Olá, ${c.cliente}! Tudo bem? 😊\nSegue a cobrança de ${c.servico || 'serviço'}: *${brl(c.valor)}*`
     + (c.venc ? `, com vencimento em ${dataBR(c.venc)}` : '')
     + `.\n\nÉ só abrir o link abaixo e tocar em "Copiar código Pix", ou ler o QR Code:\n${linkPagamento(c)}\n\nObrigado!`;
-  window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+  // com telefone no cadastro, abre direto na conversa; sem ele, você escolhe o contato
+  const cli = clientePorId(c.cliente_id);
+  const d = soDigitos(cli && cli.fone);
+  const num = d ? (d.startsWith('55') ? d : '55' + d) : '';
+  window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
 // ---------- Tela
