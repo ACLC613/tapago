@@ -51,6 +51,10 @@ header{background:var(--topo);color:var(--topo-texto);padding:20px 20px 60px;bor
 :root[data-tema="escuro"] .avatar{background:#2B3831}
 .avatar img{width:100%;height:100%;object-fit:cover;display:block}
 .engr{width:22px;height:22px;flex:0 0 22px}
+.acoesTopo{display:flex;align-items:center;gap:2px}
+.btTema{background:none;border:none;color:var(--topo-texto);cursor:pointer;padding:8px;border-radius:99px;display:flex;align-items:center}
+.btTema:active{background:#ffffff26}
+.btTema svg{width:22px;height:22px;flex:0 0 22px}
 .resumo{max-width:560px;margin:-44px auto 0;padding:0 16px}
 .total{background:var(--papel);border-radius:20px;padding:18px;box-shadow:var(--sombra);border:1px solid var(--linha)}
 .total small{color:var(--texto2);display:block;font-size:13px}
@@ -169,10 +173,15 @@ main{max-width:560px;margin:auto;padding:16px 16px 110px}
 <header>
   <div class="topo">
     <div class="logo">Tá Pago<span>.</span></div>
+    <div class="acoesTopo">
+    <button class="btTema" id="btTema" onclick="alternarTema()" title="Mudar tema" aria-label="Mudar tema">
+      <svg id="icoTema" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
+    </button>
     <button class="perfil" onclick="abrir('mDados')" title="Minha conta" aria-label="Minha conta">
       <span class="avatar" id="avatar"></span>
       <svg class="engr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
+    </div>
   </div>
 </header>
 
@@ -273,13 +282,23 @@ function setTema(t) {
   try { localStorage.setItem('tp_tema', t); } catch (e) {}
   aplicarTema();
 }
+const ICO_SOL = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
+const ICO_LUA = '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>';
 function aplicarTema() {
   const t = temaSalvo();
   const escuro = t === 'escuro' || (t === 'auto' && consultaEscuro.matches);
   document.documentElement.dataset.tema = escuro ? 'escuro' : 'claro';
   $('corTema').setAttribute('content', escuro ? '#16211C' : '#00A868');
+  // no escuro o botão oferece o claro, e vice-versa
+  $('icoTema').innerHTML = escuro ? ICO_SOL : ICO_LUA;
+  const rot = escuro ? 'Mudar para o modo claro' : 'Mudar para o modo escuro';
+  $('btTema').setAttribute('aria-label', rot);
+  $('btTema').title = rot;
   [['claro','tClaro'],['escuro','tEscuro'],['auto','tAuto']].forEach(([k, id]) =>
     $(id).classList.toggle('on', t === k));
+}
+function alternarTema() {
+  setTema(document.documentElement.dataset.tema === 'escuro' ? 'claro' : 'escuro');
 }
 consultaEscuro.addEventListener('change', () => { if (temaSalvo() === 'auto') aplicarTema(); });
 aplicarTema();
@@ -351,6 +370,11 @@ function abrir(id) {
   $(id).classList.add('aberto');
 }
 function fechar() { document.querySelectorAll('.modal').forEach(m => m.classList.remove('aberto')); }
+// fechar tocando fora do painel ou com Esc
+document.querySelectorAll('.modal').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) fechar(); });
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') fechar(); });
 
 // ---------- Filtros
 function setFiltro(f) {
