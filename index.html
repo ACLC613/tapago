@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#00A868">
+<title>Tá Pago</title>
+<meta name="description" content="Agenda de cobranças para autônomos: anote quem deve, mande o Pix pelo WhatsApp e marque quando pagou.">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--verde:#00A868;--laranja:#FF7A1A;--verm:#E5484D;--fundo:#F3F6F4;--texto:#1C2B24}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,sans-serif;background:var(--fundo);color:var(--texto);font-size:17px}
+header{background:var(--verde);color:#fff;padding:20px 20px 60px;border-radius:0 0 28px 28px}
+.topo{display:flex;justify-content:space-between;align-items:center}
+.logo{font-size:26px;font-weight:800}.logo span{color:#FFE27A}
+.engr{background:none;border:none;color:#fff;font-size:24px;cursor:pointer}
+.resumo{max-width:560px;margin:-44px auto 0;padding:0 16px}
+.total{background:#fff;border-radius:20px;padding:18px;box-shadow:0 4px 14px #0001}
+.total small{color:#667;display:block}.total b{display:block;font-size:30px;color:var(--verde)}
+main{max-width:560px;margin:auto;padding:16px 16px 110px}
+.abas{display:flex;background:#fff;border-radius:14px;padding:4px;margin-bottom:12px}
+.abas button{flex:1;border:none;background:none;padding:10px;border-radius:10px;font-size:16px;font-weight:600;color:#667;cursor:pointer}
+.abas .ativa{background:var(--verde);color:#fff}
+.card{background:#fff;border-radius:18px;padding:14px 16px;margin-bottom:10px;box-shadow:0 2px 8px #0001}
+.linha{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.nome{font-weight:700}.valor{font-weight:800;font-size:19px;white-space:nowrap}
+.serv{color:#667;font-size:15px;margin:2px 0 8px}
+.tag{font-size:13px;font-weight:700;padding:3px 10px;border-radius:99px;color:#fff;white-space:nowrap}
+.atrasado{background:var(--verm)}.avencer{background:var(--laranja)}.pago{background:var(--verde)}
+.acoes{display:flex;gap:8px;margin-top:10px}
+.acoes button{flex:1;border:none;border-radius:12px;padding:10px;font-size:15px;font-weight:600;cursor:pointer}
+.zap{background:#25D366;color:#fff}.ok{background:#E6F6EE;color:var(--verde)}
+.del{flex:0 0 44px!important;background:#F1F1F1}
+.fab{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--laranja);color:#fff;border:none;border-radius:99px;padding:16px 32px;font-size:18px;font-weight:800;box-shadow:0 6px 18px #FF7A1A66;cursor:pointer}
+.vazio{text-align:center;color:#889;padding:30px}
+.rodape{text-align:center;color:#889;font-size:13px;padding:10px 0 0}
+.rodape a{color:#889}
+.modal{position:fixed;inset:0;background:#0006;display:none;align-items:flex-end;z-index:20}
+.modal.aberto{display:flex}
+.painel{background:#fff;width:100%;max-width:560px;margin:auto;border-radius:24px 24px 0 0;padding:20px}
+.painel h2{margin-top:0}
+.painel input{width:100%;font-size:17px;padding:13px;border:1px solid #DDE;border-radius:12px;margin-bottom:10px}
+.painel .principal{width:100%;background:var(--verde);color:#fff;border:none;border-radius:14px;padding:15px;font-size:18px;font-weight:800;cursor:pointer}
+.painel .fechar{width:100%;background:none;border:none;color:#667;padding:12px;font-size:16px;cursor:pointer}
+.dica{color:#667;font-size:14px;margin:-4px 0 12px}
+.login{position:fixed;inset:0;background:var(--verde);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;z-index:30;text-align:center;padding:24px}
+.login .logo{font-size:44px}
+.login p{margin:0 0 14px;opacity:.9}
+.login input{width:100%;max-width:320px;font-size:17px;padding:14px;border:none;border-radius:14px;text-align:center}
+.login button{background:#fff;color:#1C2B24;border:none;border-radius:14px;padding:15px 30px;font-size:18px;font-weight:700;cursor:pointer}
+.login small{opacity:.85;max-width:320px;line-height:1.4}
+</style>
+</head>
+<body>
+
+<div id="login" class="login">
+  <div class="logo">Tá Pago<span>.</span></div>
+  <p>Cobrou, mandou, tá pago.</p>
+  <input id="email" type="email" inputmode="email" autocomplete="email" placeholder="seu@email.com">
+  <button onclick="entrar()">Receber link de acesso</button>
+  <small id="aviso">Sem senha: você recebe um link no e-mail e entra com um toque.</small>
+</div>
+
+<header>
+  <div class="topo">
+    <div class="logo">Tá Pago<span>.</span></div>
+    <button class="engr" onclick="abrir('mDados')" title="Meu Pix">&#9881;&#65039;</button>
+  </div>
+</header>
+
+<div class="resumo">
+  <div class="total">
+    <small>Quem me deve, no total</small>
+    <b id="total">R$ 0,00</b>
+    <small id="sub"></small>
+  </div>
+</div>
+
+<main>
+  <div class="abas">
+    <button id="aDeve" class="ativa" onclick="aba(false)">Quem me deve</button>
+    <button id="aPago" onclick="aba(true)">Tá pago</button>
+  </div>
+  <div id="lista"></div>
+  <p class="rodape"><a href="privacidade.html">Privacidade</a></p>
+</main>
+
+<button class="fab" onclick="abrir('mNova')">+ Cobrar</button>
+
+<div class="modal" id="mNova"><div class="painel">
+  <h2>Nova cobrança</h2>
+  <input id="cliente" placeholder="Nome do cliente">
+  <input id="fone" inputmode="tel" placeholder="WhatsApp com DDD">
+  <input id="servico" placeholder="O que foi feito? (ex.: corte de cabelo)">
+  <input id="valor" type="number" step="0.01" inputmode="decimal" placeholder="Valor R$">
+  <input id="venc" type="date">
+  <button class="principal" onclick="adicionar()">Salvar cobrança</button>
+  <button class="fechar" onclick="fechar()">Cancelar</button>
+</div></div>
+
+<div class="modal" id="mDados"><div class="painel">
+  <h2>Meu Pix</h2>
+  <input id="chave" placeholder="Chave Pix (telefone: +5511999999999)">
+  <p class="dica">É para a sua chave que o dinheiro vai cair.</p>
+  <input id="meuNome" placeholder="Seu nome">
+  <input id="cidade" placeholder="Sua cidade">
+  <button class="principal" onclick="salvarDados()">Salvar</button>
+  <button class="fechar" onclick="fechar()">Fechar</button>
+  <button class="fechar" onclick="sair()">Sair da conta</button>
+</div></div>
+
+<script>
+const SUPABASE_URL = 'https://xfkiaicwzyfeatsxbskz.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_LRIB_DIwGRHMqukblUxx_w_1SdKkoEA';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let dados = {}, cobs = [], verPagas = false, user = null;
+const $ = id => document.getElementById(id);
+const brl = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const dataBR = d => d ? d.split('-').reverse().join('/') : '';
+const erro = e => { if (e) { alert('Erro: ' + e.message); return true; } };
+
+// Login por link mágico no e-mail
+async function iniciar() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { $('login').style.display = 'flex'; return; }
+  user = session.user;
+  $('login').style.display = 'none';
+  await carregar();
+}
+async function entrar() {
+  const email = $('email').value.trim();
+  if (!email) return alert('Digite seu e-mail.');
+  const { error } = await sb.auth.signInWithOtp({
+    email, options: { emailRedirectTo: location.origin + location.pathname }
+  });
+  if (erro(error)) return;
+  $('aviso').textContent = 'Enviamos um link para ' + email + '. Abra o e-mail no mesmo celular e toque no link.';
+}
+async function sair() { await sb.auth.signOut(); location.reload(); }
+sb.auth.onAuthStateChange((ev, session) => { if (session && !user) iniciar(); });
+
+// Leitura do banco
+async function carregar() {
+  const { data: p } = await sb.from('perfis').select('*').maybeSingle();
+  dados = p ? { chave: p.chave, meuNome: p.nome, cidade: p.cidade } : {};
+  const { data: c, error } = await sb.from('cobrancas').select('*').order('criado_em');
+  if (erro(error)) return;
+  cobs = (c || []).map(x => ({ ...x, valor: Number(x.valor) }));
+  render();
+  if (!dados.chave) abrir('mDados');
+}
+
+function abrir(id) {
+  if (id === 'mDados') ['chave','meuNome','cidade'].forEach(k => $(k).value = dados[k] || '');
+  $(id).classList.add('aberto');
+}
+function fechar() { document.querySelectorAll('.modal').forEach(m => m.classList.remove('aberto')); }
+function aba(p) {
+  verPagas = p;
+  $('aDeve').classList.toggle('ativa', !p);
+  $('aPago').classList.toggle('ativa', p);
+  render();
+}
+
+// Gravação no banco
+async function salvarDados() {
+  dados = { chave: $('chave').value.trim(), meuNome: $('meuNome').value.trim(), cidade: $('cidade').value.trim() };
+  const { error } = await sb.from('perfis').upsert({
+    user_id: user.id, chave: dados.chave, nome: dados.meuNome, cidade: dados.cidade
+  });
+  if (!erro(error)) fechar();
+}
+async function adicionar() {
+  const valor = parseFloat($('valor').value);
+  if (!$('cliente').value.trim() || !valor) return alert('Preencha o cliente e o valor.');
+  const nova = {
+    cliente: $('cliente').value.trim(),
+    fone: $('fone').value.replace(/\D/g, ''),
+    servico: $('servico').value.trim(),
+    valor,
+    venc: $('venc').value || null
+  };
+  const { data, error } = await sb.from('cobrancas').insert(nova).select().single();
+  if (erro(error)) return;
+  cobs.push({ ...data, valor: Number(data.valor) });
+  ['cliente','fone','servico','valor','venc'].forEach(k => $(k).value = '');
+  fechar(); aba(false);
+}
+async function alternar(id) {
+  const c = cobs.find(c => c.id === id);
+  const pago = !c.pago, pago_em = pago ? new Date().toISOString().slice(0, 10) : null;
+  const { error } = await sb.from('cobrancas').update({ pago, pago_em }).eq('id', id);
+  if (erro(error)) return;
+  c.pago = pago; c.pago_em = pago_em; render();
+}
+async function excluir(id) {
+  if (!confirm('Excluir esta cobrança?')) return;
+  const { error } = await sb.from('cobrancas').delete().eq('id', id);
+  if (erro(error)) return;
+  cobs = cobs.filter(c => c.id !== id); render();
+}
+
+// WhatsApp
+function enviar(id) {
+  const c = cobs.find(c => c.id === id);
+  if (!dados.chave) { alert('Primeiro cadastre seu Pix.'); return abrir('mDados'); }
+  const code = pix(dados.chave, dados.meuNome || 'RECEBEDOR', dados.cidade || 'BRASIL', c.valor);
+  const msg = `Olá, ${c.cliente}! Tudo bem? 😊\nSegue o valor de ${c.servico || 'serviço'}: *${brl(c.valor)}*`
+    + (c.venc ? `, com vencimento em ${dataBR(c.venc)}` : '')
+    + `.\n\nÉ só copiar o código abaixo e colar no Pix do seu banco:\n\n${code}\n\nObrigado!`;
+  const num = c.fone ? (c.fone.startsWith('55') ? c.fone : '55' + c.fone) : '';
+  window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
+// Tela
+function render() {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const deve = cobs.filter(c => !c.pago);
+  const atras = deve.filter(c => c.venc && c.venc < hoje);
+  $('total').textContent = brl(deve.reduce((s, c) => s + c.valor, 0));
+  $('sub').textContent = deve.length
+    ? `${deve.length} cobrança(s)` + (atras.length ? ` · ${atras.length} atrasada(s)` : '')
+    : 'Ninguém te deve. Tá tudo pago! 🎉';
+  const lista = cobs.filter(c => c.pago === verPagas)
+    .sort((a, b) => verPagas ? b.id - a.id : (a.venc || '9').localeCompare(b.venc || '9'));
+  $('lista').innerHTML = lista.map(c => {
+    const tag = c.pago ? ['pago', 'Tá pago']
+      : (c.venc && c.venc < hoje) ? ['atrasado', 'Atrasado']
+      : ['avencer', c.venc ? 'Vence ' + dataBR(c.venc) : 'Em aberto'];
+    return `<div class="card">
+      <div class="linha"><span class="nome">${c.cliente}</span><span class="valor">${brl(c.valor)}</span></div>
+      <div class="linha"><span class="serv">${c.servico || ''}</span><span class="tag ${tag[0]}">${tag[1]}</span></div>
+      <div class="acoes">
+        ${c.pago ? '' : `<button class="zap" onclick="enviar(${c.id})">Cobrar no WhatsApp</button>`}
+        <button class="ok" onclick="alternar(${c.id})">${c.pago ? 'Desfazer' : '✓ Tá pago'}</button>
+        <button class="del" onclick="excluir(${c.id})">🗑</button>
+      </div></div>`;
+  }).join('') || `<div class="vazio">${verPagas ? 'Nenhum pagamento ainda.' : 'Toque em "+ Cobrar" para começar.'}</div>`;
+}
+
+// Pix estático no padrão BR Code do Banco Central
+function limpar(s, max) {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().slice(0, max);
+}
+function campo(id, v) { return id + String(v.length).padStart(2, '0') + v; }
+function crc16(s) {
+  let c = 0xFFFF;
+  for (let i = 0; i < s.length; i++) {
+    c ^= s.charCodeAt(i) << 8;
+    for (let k = 0; k < 8; k++) c = (c & 0x8000) ? ((c << 1) ^ 0x1021) & 0xFFFF : (c << 1) & 0xFFFF;
+  }
+  return c.toString(16).toUpperCase().padStart(4, '0');
+}
+function pix(chave, nome, cidade, valor) {
+  const conta = campo('00', 'br.gov.bcb.pix') + campo('01', chave);
+  const p = campo('00', '01') + campo('26', conta) + campo('52', '0000') + campo('53', '986')
+    + campo('54', valor.toFixed(2)) + campo('58', 'BR') + campo('59', limpar(nome, 25))
+    + campo('60', limpar(cidade, 15)) + campo('62', campo('05', '***')) + '6304';
+  return p + crc16(p);
+}
+
+iniciar();
+</script>
+</body>
+</html>
