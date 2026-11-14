@@ -296,6 +296,27 @@ function render() {
   }).join('') || `<div class="vazio">${verPagas ? 'Nenhum pagamento ainda.' : 'Toque em "+ Cobrar" para começar.'}</div>`;
 }
 
+// Releitura silenciosa: ao voltar para o app e de minuto em minuto
+let atualizando = false;
+async function atualizar() {
+  if (atualizando || !user || document.hidden) return;
+  atualizando = true;
+  try {
+    const { data, error } = await sb.from('cobrancas').select('*').order('criado_em');
+    if (!error && data) {
+      cobs = data.map(x => ({ ...x, valor: Number(x.valor) }));
+      render();
+    }
+  } catch (e) {
+    // falha de rede nao incomoda o usuario; tenta de novo no proximo ciclo
+  } finally {
+    atualizando = false;
+  }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) atualizar(); });
+window.addEventListener('focus', atualizar);
+setInterval(atualizar, 60000);
+
 function quando(iso) {
   const min = Math.round((Date.now() - new Date(iso)) / 60000);
   if (min < 1) return 'agora';
