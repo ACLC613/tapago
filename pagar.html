@@ -85,6 +85,18 @@ if (!d || !d.k || !d.v) {
 
   new QRCode(document.getElementById('qr'), { text: code, width: 210, height: 210 });
 
+  if (d.t) {
+    fetch('https://xfkiaicwzyfeatsxbskz.supabase.co/rest/v1/rpc/marcar_aberto', {
+      method: 'POST',
+      headers: {
+        'apikey': 'sb_publishable_LRIB_DIwGRHMqukblUxx_w_1SdKkoEA',
+        'Authorization': 'Bearer sb_publishable_LRIB_DIwGRHMqukblUxx_w_1SdKkoEA',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ p_token: d.t })
+    }).catch(() => {});
+  }
+
   const btn = document.getElementById('btn');
   btn.onclick = async () => {
     const txt = document.getElementById('txt');
