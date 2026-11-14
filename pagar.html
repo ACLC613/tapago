@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#00A868">
+<title>Pagar com Pix — Tá Pago</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{--verde:#00A868;--laranja:#FF7A1A;--fundo:#F3F6F4;--texto:#1C2B24}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,sans-serif;background:var(--fundo);color:var(--texto);font-size:17px}
+header{background:var(--verde);color:#fff;padding:18px 20px 50px;text-align:center}
+.logo{font-size:22px;font-weight:800}.logo span{color:#FFE27A}
+main{max-width:420px;margin:-38px auto 0;padding:0 16px 40px}
+.cartao{background:#fff;border-radius:20px;padding:22px 20px;box-shadow:0 4px 14px #0001;text-align:center}
+.rotulo{color:#667;font-size:14px}
+.valor{font-size:38px;font-weight:800;color:var(--verde);margin:4px 0 2px}
+.servico{font-size:16px;margin-bottom:2px}
+.venc{color:#667;font-size:14px}
+#qr{display:flex;justify-content:center;margin:20px 0 6px}
+#qr img,#qr canvas{border-radius:10px}
+.dica{color:#667;font-size:14px;margin:0 0 18px}
+button{width:100%;border:none;border-radius:14px;padding:16px;font-size:17px;font-weight:800;cursor:pointer}
+.copiar{background:var(--verde);color:#fff}
+.copiado{background:#E6F6EE;color:var(--verde)}
+.codigo{margin-top:14px;width:100%;font-family:ui-monospace,monospace;font-size:11px;color:#556;background:#F7F8F7;border:1px solid #E3E6E3;border-radius:12px;padding:10px;resize:none}
+.recebedor{margin-top:16px;color:#667;font-size:13px;line-height:1.5}
+.rodape{text-align:center;color:#889;font-size:12px;margin-top:22px;line-height:1.6}
+.rodape a{color:#889}
+.erro{background:#fff;border-radius:20px;padding:24px;text-align:center;color:#667}
+</style>
+</head>
+<body>
+<header><div class="logo">Tá Pago<span>.</span></div></header>
+<main id="conteudo"></main>
+
+<script>
+function deb64(s) {
+  s = s.replace(/-/g, '+').replace(/_/g, '/');
+  return new TextDecoder().decode(Uint8Array.from(atob(s), ch => ch.charCodeAt(0)));
+}
+function limpar(s, max) {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().slice(0, max);
+}
+function campo(id, v) { return id + String(v.length).padStart(2, '0') + v; }
+function crc16(s) {
+  let c = 0xFFFF;
+  for (let i = 0; i < s.length; i++) {
+    c ^= s.charCodeAt(i) << 8;
+    for (let k = 0; k < 8; k++) c = (c & 0x8000) ? ((c << 1) ^ 0x1021) & 0xFFFF : (c << 1) & 0xFFFF;
+  }
+  return c.toString(16).toUpperCase().padStart(4, '0');
+}
+function pix(chave, nome, cidade, valor) {
+  const conta = campo('00', 'br.gov.bcb.pix') + campo('01', chave);
+  const p = campo('00', '01') + campo('26', conta) + campo('52', '0000') + campo('53', '986')
+    + campo('54', valor.toFixed(2)) + campo('58', 'BR') + campo('59', limpar(nome, 25))
+    + campo('60', limpar(cidade, 15)) + campo('62', campo('05', '***')) + '6304';
+  return p + crc16(p);
+}
+const brl = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const dataBR = d => d ? d.split('-').reverse().join('/') : '';
+
+let d = null;
+try { d = JSON.parse(deb64(location.hash.slice(1))); } catch (e) { d = null; }
+
+const alvo = document.getElementById('conteudo');
+if (!d || !d.k || !d.v) {
+  alvo.innerHTML = '<div class="erro">Link de cobrança inválido ou incompleto.<br>Peça para quem enviou gerar um novo.</div>';
+} else {
+  const code = pix(d.k, d.n || 'RECEBEDOR', d.c || 'BRASIL', Number(d.v));
+  alvo.innerHTML = `<div class="cartao">
+    <div class="rotulo">Valor a pagar</div>
+    <div class="valor">${brl(Number(d.v))}</div>
+    ${d.s ? `<div class="servico">${d.s}</div>` : ''}
+    ${d.d ? `<div class="venc">Vencimento: ${dataBR(d.d)}</div>` : ''}
+    <div id="qr"></div>
+    <p class="dica">Abra o app do seu banco, escolha Pix &gt; Ler QR Code e aponte para o código acima.</p>
+    <button class="copiar" id="btn">Copiar código Pix</button>
+    <textarea class="codigo" id="txt" rows="3" readonly>${code}</textarea>
+    <div class="recebedor">Você vai pagar para<br><b>${d.n || 'Recebedor'}</b></div>
+  </div>
+  <p class="rodape">O pagamento acontece direto no app do seu banco.<br>O Tá Pago não recebe nem guarda o seu dinheiro.<br><a href="privacidade.html">Privacidade</a></p>`;
+
+  new QRCode(document.getElementById('qr'), { text: code, width: 210, height: 210 });
+
+  const btn = document.getElementById('btn');
+  btn.onclick = async () => {
+    const txt = document.getElementById('txt');
+    try {
+      await navigator.clipboard.writeText(code);
+    } catch (e) {
+      txt.focus(); txt.select(); document.execCommand('copy');
+    }
+    btn.textContent = '✓ Código copiado!';
+    btn.className = 'copiado';
+    setTimeout(() => { btn.textContent = 'Copiar código Pix'; btn.className = 'copiar'; }, 2500);
+  };
+}
+</script>
+</body>
+</html>
